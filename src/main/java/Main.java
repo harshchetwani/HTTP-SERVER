@@ -4,8 +4,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.zip.GZIPOutputStream;
 import java.util.zip.DeflaterOutputStream;
+import java.util.zip.GZIPOutputStream;
 
 public class Main {
     private static String directory;
@@ -72,9 +72,9 @@ public class Main {
             throws IOException {
         String httpResponse;
         StringBuilder responseBody = new StringBuilder();
-        String contentEncoding = headers.getOrDefault("Accept-Encoding", "");
-        boolean gzip = contentEncoding.contains("gzip");
-        boolean deflate = contentEncoding.contains("deflate");
+        String acceptEncoding = headers.getOrDefault("Accept-Encoding", "");
+        boolean gzip = acceptEncoding.contains("gzip");
+        boolean deflate = acceptEncoding.contains("deflate");
 
         if ("GET".equals(httpMethod)) {
             if ("/".equals(urlPath)) {

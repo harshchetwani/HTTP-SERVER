@@ -1,105 +1,144 @@
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-public class Main extends Thread {
-    private Socket sock;
-    private String dir;
-
-    public Main(Socket sock, String dir) {
-        this.sock = sock;
-        this.dir = dir;
+import java.util.HashMap;
+import java.util.Map;
+public class Main {
+  public static void main(String[] args) {
+    ServerSocket serverSocket = null;
+    Socket clientSocket = null;
+    try {
+      String directoryString = null;
+      if (args.length > 1 && "--directory".equals(args[0])) {
+        directoryString = args[1];
+      }
+      // Connect
+      serverSocket = new ServerSocket(4221);
+      serverSocket.setReuseAddress(true);
+      while (true) {
+        clientSocket = serverSocket.accept();
+        System.out.println("accepted new connection");
+        RequestHandler handler =
+            new RequestHandler(clientSocket.getInputStream(),
+                               clientSocket.getOutputStream(), directoryString);
+        handler.start();
+      }
+    } catch (IOException e) {
+      System.out.println("IOException: " + e.getMessage());
     }
-
-    @Override
-    public void run() {
-        try {
-            InputStream in = sock.getInputStream();
-            BufferedReader bif = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
-            String inr;
-            List<String> inp = new ArrayList<>();
-            while ((inr = bif.readLine()) != null && !inr.isEmpty()) {
-                inp.add(inr);
-            }
-
-            if (inp.isEmpty()) {
-                sendCode(sock, "HTTP/1.1 400 Bad Request\r\n\r\n");
-                return;
-            }
-
-            String[] re = inp.get(0).split(" ");
-
-            if (re[1].equals("/")) {
-                sendCode(sock, "HTTP/1.1 200 OK\r\n\r\n");
-            } else if (re[1].startsWith("/echo/")) {
-                String ec = re[1].substring("/echo/".length());
-                sendCode(
-                    sock,
-                    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-                        ec.length() + "\r\n\r\n" + ec);
-            } else if (re[1].equals("/user-agent")) {
-                if (inp.size() > 2) {
-                    String[] ua = inp.get(2).split(" ");
-                    sendCode(
-                        sock,
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: " +
-                            ua[1].length() + "\r\n\r\n" + ua[1]);
-                } else {
-                    sendCode(sock, "HTTP/1.1 400 Bad Request\r\n\r\n");
-                }
-            } else if (re[1].startsWith("/files/")) {
-                String fi = re[1].substring("/files/".length());
-                Path filePath = Path.of(dir + "/" + fi);
-                if (Files.exists(filePath)) {
-                    if (re[0].equals("GET")) {
-                        String cc = Files.readString(filePath);
-                        sendCode(
-                            sock,
-                            "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " +
-                                cc.length() + "\r\n\r\n" + cc);
-                    } else if (re[0].equals("POST")) {
-                        // Skip headers and read body
-                        String[] lengthHeader = inp.stream()
-                            .filter(line -> line.startsWith("Content-Length:"))
-                            .findFirst()
-                            .orElse("Content-Length: 0")
-                            .split(" ");
-                        int contentLength = Integer.parseInt(lengthHeader[1]);
-                        char[] bc = new char[contentLength];
-                        bif.read(bc, 0, contentLength);
-                        String bd = new String(bc);
-                        Files.write(filePath, bd.getBytes(StandardCharsets.UTF_8));
-                        sendCode(sock, "HTTP/1.1 201 Created\r\n\r\n");
-                    } else {
-                        sendCode(sock, "HTTP/1.1 405 Method Not Allowed\r\n\r\n");
-                    }
-                } else {
-                    sendCode(sock, "HTTP/1.1 404 Not Found\r\n\r\n");
-                }
-            } else {
-                sendCode(sock, "HTTP/1.1 404 Not Found\r\n\r\n");
-            }
-            System.out.println("Accepted new connection");
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                sock.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+  }
+}
+class RequestHandler extends Thread {
+  private InputStream inputStream;
+  private OutputStream outputStream;
+  private String fileDir;
+  RequestHandler(InputStream inputStream, OutputStream outputStream,
+                 String fileDir) {
+    this.inputStream = inputStream;
+    this.outputStream = outputStream;
+    this.fileDir = fileDir == null ? "" : fileDir + File.separator;
+  }
+  public void run() {
+    try {
+      // Read
+      BufferedReader bufferedReader =
+          new BufferedReader(new InputStreamReader(inputStream));
+      String requestLine = bufferedReader.readLine();
+      Map<String, String> requestHeaders = new HashMap<String, String>();
+      String header = null;
+      while ((header = bufferedReader.readLine()) != null &&
+             !header.isEmpty()) {
+        String[] keyVal = header.split(":", 2);
+        if (keyVal.length == 2) {
+          requestHeaders.put(keyVal[0], keyVal[1].trim());
         }
+      }
+      // Read body
+      StringBuffer bodyBuffer = new StringBuffer();
+      while (bufferedReader.ready()) {
+        bodyBuffer.append((char)bufferedReader.read());
+      }
+      String body = bodyBuffer.toString();
+      // Process
+      String[] requestLinePieces = requestLine.split(" ", 3);
+      String httpMethod = requestLinePieces[0];
+      String requestTarget = requestLinePieces[1];
+      String httpVersion = requestLinePieces[2];
+      // Write
+      if ("POST".equals(httpMethod)) {
+        if (requestTarget.startsWith("/files/")) {
+          File file = new File(fileDir + requestTarget.substring(7));
+          if (file.createNewFile()) {
+            FileWriter fileWriter = new FileWriter(file);
+            fileWriter.write(body);
+            fileWriter.close();
+          }
+          outputStream.write("HTTP/1.1 201 Created\r\n\r\n".getBytes());
+        } else {
+          outputStream.write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes());
+        }
+        outputStream.flush();
+        outputStream.close();
+        return;
+      }
+      if (requestTarget.equals("/")) {
+        outputStream.write("HTTP/1.1 200 OK\r\n\r\n".getBytes());
+      } else if (requestTarget.startsWith("/echo/")) {
+        String echoString = requestTarget.substring(6);
+        String outputString = "HTTP/1.1 200 OK\r\n"
+                              + "Content-Type: text/plain\r\n"
+                              + "Content-Length: " + echoString.length() +
+                              "\r\n"
+                              + "\r\n" + echoString;
+        outputStream.write(outputString.getBytes());
+      } else if (requestTarget.equals("/user-agent")) {
+        String outputString =
+            "HTTP/1.1 200 OK\r\n"
+            + "Content-Type: text/plain\r\n"
+            + "Content-Length: " + requestHeaders.get("User-Agent").length() +
+            "\r\n"
+            + "\r\n" + requestHeaders.get("User-Agent");
+        outputStream.write(outputString.getBytes());
+      } else if (requestTarget.startsWith("/files/")) {
+        String fileName = requestTarget.substring(7);
+        FileReader fileReader;
+        try {
+          fileReader = new FileReader(fileDir + fileName);
+        } catch (FileNotFoundException e) {
+          outputStream.write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes());
+          outputStream.flush();
+          outputStream.close();
+          return;
+        }
+        BufferedReader bufferedFileReader = new BufferedReader(fileReader);
+        StringBuffer stringBuffer = new StringBuffer();
+        String line;
+        while ((line = bufferedFileReader.readLine()) != null) {
+          stringBuffer.append(line);
+        }
+        bufferedFileReader.close();
+        fileReader.close();
+        String outputString = "HTTP/1.1 200 OK\r\n"
+                              + "Content-Type: application/octet-stream\r\n"
+                              + "Content-Length: " + stringBuffer.length() +
+                              "\r\n"
+                              + "\r\n" + stringBuffer.toString();
+        outputStream.write(outputString.getBytes());
+      } else {
+        outputStream.write("HTTP/1.1 404 Not Found\r\n\r\n".getBytes());
+      }
+      outputStream.flush();
+      outputStream.close();
+    } catch (IOException e) {
+      System.out.println("IOException: " + e.getMessage());
     }
-
-    public static void sendCode(Socket sock, String code) throws IOException {
-        OutputStream out = sock.getOutputStream();
-        out.write(code.getBytes(StandardCharsets.UTF_8));
-        out.flush();
-        out.close();
-    }
+  }
 }

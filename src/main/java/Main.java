@@ -2,6 +2,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
@@ -32,6 +33,7 @@ public class Main {
 
             String requestLine = reader.readLine();
             String[] requestParts = requestLine.split(" ");
+            String method = requestParts[0];
             String path = requestParts[1];
             String userAgent = "";
             String line;
@@ -42,7 +44,29 @@ public class Main {
                 }
             }
 
-            if (path.startsWith("/files/")) {
+            if (method.equals("POST") && path.startsWith("/files/")) {
+                String fileName = path.substring(7);
+                Path filePath = Paths.get(directory, fileName);
+                
+                // Read the request body which contains the file content
+                StringBuilder body = new StringBuilder();
+                String contentLengthHeader = reader.readLine();
+                while (!contentLengthHeader.isEmpty()) {
+                    if (contentLengthHeader.startsWith("Content-Length: ")) {
+                        int contentLength = Integer.parseInt(contentLengthHeader.substring(16));
+                        char[] buffer = new char[contentLength];
+                        reader.read(buffer, 0, contentLength);
+                        body.append(buffer);
+                        break;
+                    }
+                    contentLengthHeader = reader.readLine();
+                }
+
+                // Write the received content to the file
+                Files.write(filePath, body.toString().getBytes());
+                String response = "HTTP/1.1 201 Created\r\n\r\n";
+                outputStream.write(response.getBytes());
+            } else if (path.startsWith("/files/")) {
                 String fileName = path.substring(7);
                 Path filePath = Paths.get(directory, fileName);
                 if (Files.exists(filePath)) {

@@ -8,12 +8,12 @@ import java.util.Objects;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-public class Main extends Thread {
+public class RequestHandler extends Thread {
     private InputStream inputStream;
     private OutputStream outputStream;
     private String fileDir;
 
-    Main(InputStream inputStream, OutputStream outputStream, String fileDir) {
+    RequestHandler(InputStream inputStream, OutputStream outputStream, String fileDir) {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.fileDir = fileDir == null ? "" : fileDir + File.separator;

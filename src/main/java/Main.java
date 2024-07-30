@@ -32,12 +32,16 @@ public class Main {
              OutputStream outputStream = clientSocket.getOutputStream()) {
 
             String requestLine = reader.readLine();
+            if (requestLine == null) {
+                return; // Connection closed or invalid request
+            }
             String[] requestParts = requestLine.split(" ");
             String method = requestParts[0];
             String path = requestParts[1];
             String userAgent = "";
             String line;
 
+            // Read headers
             while (!(line = reader.readLine()).equals("")) {
                 if (line.startsWith("User-Agent: ")) {
                     userAgent = line.substring(12);
@@ -47,23 +51,23 @@ public class Main {
             if (method.equals("POST") && path.startsWith("/files/")) {
                 String fileName = path.substring(7);
                 Path filePath = Paths.get(directory, fileName);
-                
-                // Read the request body which contains the file content
-                StringBuilder body = new StringBuilder();
-                String contentLengthHeader = reader.readLine();
-                while (!contentLengthHeader.isEmpty()) {
-                    if (contentLengthHeader.startsWith("Content-Length: ")) {
-                        int contentLength = Integer.parseInt(contentLengthHeader.substring(16));
-                        char[] buffer = new char[contentLength];
-                        reader.read(buffer, 0, contentLength);
-                        body.append(buffer);
-                        break;
+
+                // Read Content-Length header
+                int contentLength = 0;
+                while (!(line = reader.readLine()).equals("")) {
+                    if (line.startsWith("Content-Length: ")) {
+                        contentLength = Integer.parseInt(line.substring(16));
                     }
-                    contentLengthHeader = reader.readLine();
                 }
 
-                // Write the received content to the file
-                Files.write(filePath, body.toString().getBytes());
+                // Read the body
+                char[] body = new char[contentLength];
+                reader.read(body, 0, contentLength);
+                String fileContent = new String(body);
+
+                // Write the content to the file
+                Files.write(filePath, fileContent.getBytes());
+
                 String response = "HTTP/1.1 201 Created\r\n\r\n";
                 outputStream.write(response.getBytes());
             } else if (path.startsWith("/files/")) {

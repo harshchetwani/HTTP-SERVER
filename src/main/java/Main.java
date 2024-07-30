@@ -81,8 +81,8 @@ class ClientHandler implements Runnable {
                 output.write(finalStr.getBytes());
             } else if (str.length > 1 && str[1].equals("files")) {
                 String filename = HttpRequest[1].substring("/files/".length());
-                Path filePath = Paths.get(filename);
-                System.out.println("Checking file: " + filePath.toAbsolutePath()); // Debugging line
+                Path filePath = Paths.get(filename).toAbsolutePath();
+                System.out.println("Checking file: " + filePath); // Debugging line
                 if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
                     byte[] fileContent = Files.readAllBytes(filePath);
                     String responseHeader = "HTTP/1.1 200 OK\r\n"

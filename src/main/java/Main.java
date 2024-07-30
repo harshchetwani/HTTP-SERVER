@@ -1,8 +1,13 @@
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.io.File;
 
 public class Main {
     public static void main(String[] args) {
@@ -66,17 +71,18 @@ class ClientHandler implements Runnable {
                                 "\r\n\r\n" + responsebody;
                 output.write(finalstr.getBytes());
             } else if (str.length > 2 && str[1].equals("files")) {
-                String filename = str[2];
+                String filename = HttpRequest[1].substring("/files/".length());
                 File file = new File(filename);
 
                 if (file.exists() && !file.isDirectory()) {
-                    byte[] fileContent = Files.readAllBytes(Paths.get(filename));
+                    byte[] fileContent = Files.readAllBytes(file.toPath());
                     String responseHeader = "HTTP/1.1 200 OK\r\n"
                                           + "Content-Type: application/octet-stream\r\n"
                                           + "Content-Length: " + fileContent.length + "\r\n\r\n";
                     output.write(responseHeader.getBytes());
                     output.write(fileContent);
                 } else {
+                    System.out.println("File not found: " + filename);
                     String notFoundResponse = "HTTP/1.1 404 Not Found\r\n\r\n";
                     output.write(notFoundResponse.getBytes());
                 }

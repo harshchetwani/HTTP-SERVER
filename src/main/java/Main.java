@@ -6,8 +6,8 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.io.File;
 
 public class Main {
     public static void main(String[] args) {
@@ -58,26 +58,33 @@ class ClientHandler implements Runnable {
                                 + "Content-Length: 0\r\n\r\n";
                 output.write(response.getBytes());
             } else if (str[1].equals("user-agent")) {
-                reader.readLine();
-                String useragent = reader.readLine().split("\\s+")[1];
+                reader.readLine(); // Read the empty line
+                String userAgent = reader.readLine();
+                if (userAgent != null) {
+                    String[] userAgentParts = userAgent.split("\\s+", 2);
+                    if (userAgentParts.length > 1) {
+                        userAgent = userAgentParts[1];
+                    }
+                } else {
+                    userAgent = "Unknown";
+                }
                 String reply = String.format(
                     "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: %s\r\n\r\n%s\r\n",
-                    useragent.length(), useragent);
+                    userAgent.length(), userAgent);
                 output.write(reply.getBytes());
             } else if (str.length > 2 && str[1].equals("echo")) {
-                String responsebody = str[2];
-                String finalstr = "HTTP/1.1 200 OK\r\n"
+                String responseBody = str[2];
+                String finalStr = "HTTP/1.1 200 OK\r\n"
                                 + "Content-Type: text/plain\r\n"
-                                + "Content-Length: " + responsebody.length() +
-                                "\r\n\r\n" + responsebody;
-                output.write(finalstr.getBytes());
+                                + "Content-Length: " + responseBody.length() +
+                                "\r\n\r\n" + responseBody;
+                output.write(finalStr.getBytes());
             } else if (str.length > 1 && str[1].equals("files")) {
                 String filename = HttpRequest[1].substring("/files/".length());
-                File file = new File(filename);
-
-                System.out.println("Checking file: " + file.getAbsolutePath()); // Debugging line
-                if (file.exists() && !file.isDirectory()) {
-                    byte[] fileContent = Files.readAllBytes(file.toPath());
+                Path filePath = Paths.get(filename);
+                System.out.println("Checking file: " + filePath.toAbsolutePath()); // Debugging line
+                if (Files.exists(filePath) && !Files.isDirectory(filePath)) {
+                    byte[] fileContent = Files.readAllBytes(filePath);
                     String responseHeader = "HTTP/1.1 200 OK\r\n"
                                           + "Content-Type: application/octet-stream\r\n"
                                           + "Content-Length: " + fileContent.length + "\r\n\r\n";

@@ -48,6 +48,7 @@ class ClientHandler implements Runnable {
             if (line == null) {
                 return;
             }
+            System.out.println("Received request: " + line); // Debugging line
             String[] HttpRequest = line.split(" ");
             String[] str = HttpRequest[1].split("/");
 
@@ -70,10 +71,11 @@ class ClientHandler implements Runnable {
                                 + "Content-Length: " + responsebody.length() +
                                 "\r\n\r\n" + responsebody;
                 output.write(finalstr.getBytes());
-            } else if (str.length > 2 && str[1].equals("files")) {
+            } else if (str.length > 1 && str[1].equals("files")) {
                 String filename = HttpRequest[1].substring("/files/".length());
                 File file = new File(filename);
 
+                System.out.println("Checking file: " + file.getAbsolutePath()); // Debugging line
                 if (file.exists() && !file.isDirectory()) {
                     byte[] fileContent = Files.readAllBytes(file.toPath());
                     String responseHeader = "HTTP/1.1 200 OK\r\n"
